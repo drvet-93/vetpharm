@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#0f766e"><link rel="manifest" href="manifest.json">
+<title>صيدلية بيطرية - الجرد</title>
+<style>
+:root{--g:#0f766e;--g2:#14b8a6;--bg:#f1f5f4;--c:#fff;--t:#0f172a;--m:#64748b;--r:#dc2626;--o:#ea580c;--b:#e2e8f0}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:system-ui,"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--t);padding-bottom:76px}
+header{background:var(--g);color:#fff;padding:12px 14px;position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px}
+header h1{font-size:18px;margin:0;flex:1}
+header select,header button{background:#ffffff26;color:#fff;border:0;border-radius:8px;padding:6px 8px;font-size:13px}
+header option{color:#000}
+main{padding:12px;max-width:720px;margin:auto}
+.card{background:var(--c);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px #0001}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--c);border-radius:14px;padding:12px;box-shadow:0 1px 3px #0001}
+.stat b{display:block;font-size:20px;margin-top:4px}.stat span{font-size:12px;color:var(--m)}
+.pos{color:var(--g)}.neg{color:var(--r)}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--b);border-radius:10px;font-size:16px;font-family:inherit;background:#fff}
+label{font-size:12px;color:var(--m);display:block;margin:8px 0 3px}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.fix{flex:0 0 auto}
+button.b{background:var(--g);color:#fff;border:0;border-radius:10px;padding:11px 14px;font-size:15px;font-family:inherit;width:100%;margin-top:8px}
+button.b.s{background:#e2e8f0;color:var(--t)}button.b.d{background:var(--r)}
+button.mic{flex:0 0 44px;height:44px;border-radius:50%;border:0;background:var(--g2);color:#fff;font-size:20px;padding:0}
+button.mic.on{background:var(--r);animation:p 1s infinite}@keyframes p{50%{opacity:.5}}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid var(--b);z-index:5}
+nav button{flex:1;border:0;background:none;padding:8px 2px;font-size:11px;color:var(--m);font-family:inherit}
+nav button i{display:block;font-style:normal;font-size:20px}nav button.a{color:var(--g);font-weight:700}
+.item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--b)}
+.item:last-child{border:0}.item small{color:var(--m);display:block}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;background:#e2e8f0}
+.tag.w{background:#ffedd5;color:var(--o)}.tag.r{background:#fee2e2;color:var(--r)}.tag.g{background:#ccfbf1;color:var(--g)}
+h2{font-size:16px;margin:4px 0 8px}
+#toast{position:fixed;top:60px;left:12px;right:12px;background:#0f172a;color:#fff;padding:12px;border-radius:12px;z-index:9;display:none;font-size:14px}
+.login{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:20px;max-width:420px;margin:auto}
+.big{font-size:40px;text-align:center}
+.hint{font-size:12px;color:var(--m);margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px 4px;border-bottom:1px solid var(--b);text-align:right}
+</style></head><body>
+<div id="toast"></div><div id="app"></div>
+<script>window.VARIANT='main';
+/* ===== Data layer: swap Local for Firebase (Spark, free) without touching the UI ===== */
+const uid=()=>Math.random().toString(36).slice(2,10);
+const Local={
+  key:'vetpharm.v1',
+  load(){try{return JSON.parse(localStorage.getItem(this.key))}catch(e){return null}},
+  save(s){localStorage.setItem(this.key,JSON.stringify(s));try{bc.postMessage('chg')}catch(e){}},
+};
+/* Firebase adapter placeholder: implement load()/save()/onRemote() with Firestore onSnapshot when project exists */
+const bc=('BroadcastChannel' in window)?new BroadcastChannel('vetpharm'):{postMessage(){},onmessage:null};
+const Store=Local;
+let S=Store.load()||{drugs:[],invoices:[],debts:[],log:[],users:[
+ {id:'owner',name:'الدكتور رمضان',role:'owner',pin:'1234'},
+ {id:'s1',name:'موظف فرع ١',role:'staff',branch:1,pin:'1111'},
+ {id:'s2',name:'موظف فرع ٢',role:'staff',branch:2,pin:'2222'}],
+ branches:{1:'فرع ١',2:'فرع ٢'}};
+const VARIANT=window.VARIANT||'main';let me=null,view='home',branch=0,q='';
+const save=()=>Store.save(S);
+bc.onmessage=()=>{const n=Store.load();if(!n)return;const old=S;S=n;
+  if(me&&me.role!=='owner')diffPrices(old,n);render()};
+function diffPrices(o,n){n.drugs.forEach(d=>{const x=o.drugs.find(y=>y.id===d.id);
+  if(x&&(x.sell!==d.sell||x.buy!==d.buy)){const m=`تغيير سعر: ${d.name} ← بيع ${d.sell} / شراء ${d.buy}`;toast(m);
+   try{if(Notification.permission==='granted')new Notification('تغيير سعر',{body:m})}catch(e){}}})}
+const IC={"home": "<path d=\"M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/>", "pill": "<path d=\"M10.5 20.5a5 5 0 0 1-7-7l10-10a5 5 0 0 1 7 7z\"/><path d=\"M8.5 8.5l7 7\"/>", "receipt": "<path d=\"M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z\"/><path d=\"M8 8h8M8 12h8\"/>", "box": "<path d=\"M21 8l-9-5-9 5v8l9 5 9-5z\"/><path d=\"M3 8l9 5 9-5M12 13v8\"/>", "card": "<rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/><path d=\"M2 10h20\"/>", "chart": "<path d=\"M4 20V10M10 20V4M16 20v-8M22 20H2\"/>", "clock": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/>", "gear": "<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2\"/>", "mic": "<rect x=\"9\" y=\"2\" width=\"6\" height=\"12\" rx=\"3\"/><path d=\"M5 11a7 7 0 0 0 14 0M12 18v4\"/>", "cam": "<path d=\"M3 8h4l2-3h6l2 3h4v12H3z\"/><circle cx=\"12\" cy=\"13\" r=\"4\"/>", "x": "<path d=\"M6 6l12 12M18 6L6 18\"/>", "pillh": "<path d=\"M10.5 20.5a5 5 0 0 1-7-7l10-10a5 5 0 0 1 7 7z\"/><path d=\"M8.5 8.5l7 7\"/>"};
+const ic=(n,z=22)=>`<svg width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle">${IC[n]}</svg>`;
+/* ===== helpers ===== */
+const A2E=s=>String(s).replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c));
+const W={'صفر':0,'واحد':1,'واحده':1,'اتنين':2,'اثنين':2,'ثلاثه':3,'تلاته':3,'ثلاثة':3,'تلاتة':3,'اربعه':4,'اربعة':4,'أربعة':4,'خمسه':5,'خمسة':5,'سته':6,'ستة':6,'سبعه':7,'سبعة':7,'تمانيه':8,'ثمانيه':8,'ثمانية':8,'تمانية':8,'تسعه':9,'تسعة':9,'عشره':10,'عشرة':10,'عشرين':20,'تلاتين':30,'ثلاثين':30,'اربعين':40,'خمسين':50,'ستين':60,'سبعين':70,'تمانين':80,'ثمانين':80,'تسعين':90,'مية':100,'ميه':100,'مائة':100,'مئة':100};
+function num(s){s=A2E(s).trim();const m=s.match(/\d+(\.\d+)?/);if(m)return parseFloat(m[0]);
+  let t=0,f=false;s.split(/\s+/).forEach(w=>{w=w.replace(/^و/,'');if(W[w]!==undefined){t+=W[w];f=true}});return f?t:NaN}
+const norm=s=>A2E(s).toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').trim();
+const money=n=>(Math.round(n*100)/100).toLocaleString('ar-EG')+' ج';
+const stock=(d,b)=>d.batches.filter(x=>!b||x.branch===b).reduce((s,x)=>s+x.qty,0);
+const today=()=>new Date().toISOString().slice(0,10);
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',5000)}
+const isOwner=()=>me&&me.role==='owner';
+const myBranch=()=>isOwner()?branch:me.branch;
+/* ===== voice ===== */
+function listen(cb,btn){const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!R){toast('الصوت مش متاح في المتصفح ده. استخدم كروم على الأندرويد.');return}
+  const r=new R();r.lang='ar-EG';r.interimResults=false;btn&&btn.classList.add('on');
+  r.onresult=e=>cb(e.results[0][0].transcript);r.onend=()=>btn&&btn.classList.remove('on');
+  r.onerror=e=>{btn&&btn.classList.remove('on');toast('تعذر التسجيل: '+e.error+' (محتاج إنترنت)')};r.start()}
+function mic(id,numeric){return `<button type="button" class="mic" onclick="micFill('${id}',${!!numeric},this)">${ic('mic')}</button>`}
+function micFill(id,n,btn){listen(t=>{const el=document.getElementById(id);if(n){const v=num(t);el.value=isNaN(v)?'':v}else el.value=t;
+  el.dispatchEvent(new Event('input'))},btn)}
+const $=id=>document.getElementById(id);
+function findDrugs(t){const n=norm(t);if(!n)return S.drugs;return S.drugs.filter(d=>norm(d.name+' '+(d.alias||'')).includes(n))}
+/* ===== login ===== */
+function loginView(){return `<div class="login"><div class="big" style="color:var(--g)">${ic('pill',56)}</div><h2 style="text-align:center">صيدلية بيطرية - الجرد</h2>
+<label>المستخدم</label><select id="lu">${S.users.filter(u=>VARIANT==='main'?u.role==='owner':(VARIANT==='branch1'?u.id==='s1':u.id==='s2')).map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
+<label>الرقم السري</label><input id="lp" type="password" inputmode="numeric">
+<button class="b" onclick="doLogin()">دخول</button>
+<div class="hint">النسخة التجريبية: الأرقام السرية مؤقتة. هتتبدل بحسابات حقيقية لما نوصل المزامنة.</div></div>`}
+function doLogin(){const u=S.users.find(x=>x.id===$('lu').value);if(u&&u.pin===$('lp').value){me=u;view='home';branch=0;
+  try{Notification.requestPermission()}catch(e){}render()}else toast('الرقم السري غلط')}
+/* ===== views ===== */
+function totals(b){let val=0,sellv=0;S.drugs.forEach(d=>{const n=stock(d,b);val+=n*d.buy;sellv+=n*d.sell});return{val,sellv}}
+function debtsTotal(b){return S.debts.filter(d=>!b||d.branch===b).reduce((s,d)=>s+d.amount-d.paid,0)}
+function dayStats(date,b){const inv=S.invoices.filter(i=>i.date===date&&(!b||i.branch===b));
+  let sales=0,cost=0,cash=0;inv.forEach(i=>{const t=i.lines.reduce((s,l)=>s+l.qty*l.price,0),c=i.lines.reduce((s,l)=>s+l.qty*l.buy,0);sales+=t;cost+=c;if(!i.credit)cash+=t});
+  return{inv,sales,cost,profit:sales-cost,margin:sales?((sales-cost)/sales*100):0,cash}}
+function home(){const b=myBranch(),t=totals(b),ds=dayStats(today(),b);
+ return `<div class="grid"><div class="stat"><span>قيمة المخزون (شراء)</span><b>${money(t.val)}</b></div>
+ <div class="stat"><span>قيمة المخزون (بيع)</span><b>${money(t.sellv)}</b></div>
+ <div class="stat"><span>المديونيات</span><b class="neg">${money(debtsTotal(b))}</b></div>
+ <div class="stat"><span>مبيعات النهاردة</span><b>${money(ds.sales)}</b></div>
+ <div class="stat"><span>ربح النهاردة</span><b class="pos">${money(ds.profit)}</b></div>
+ <div class="stat"><span>هامش الربح</span><b class="pos">${ds.margin.toFixed(1)}%</b></div></div>
+ ${backupWarn()}<div class="card" style="margin-top:10px"><h2>تنبيهات الصلاحية</h2>${expirySummary(b,true)}</div>`}
+function backupWarn(){if(!S.drugs.length)return '';const lb=+localStorage.getItem('vetpharm.lastBackup')||0;if(Date.now()-lb<7*864e5)return '';return '<div class="card" style="margin-top:10px;border:1px solid var(--o)">خد نسخة احتياطية (المزيد ← نسخة احتياطية). مسح بيانات المتصفح بيمسح السجلات.</div>'}
+function expiryRows(b){const m={};S.drugs.forEach(d=>d.batches.forEach(x=>{if((b&&x.branch!==b)||x.qty<=0||!x.exp)return;
+  (m[x.exp]=m[x.exp]||[]).push({name:d.name,qty:x.qty,branch:x.branch})}));return Object.keys(m).sort().map(k=>({month:k,items:m[k]}))}
+function monthName(k){const[y,m]=k.split('-');return['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][+m-1]+' '+y}
+function expirySummary(b,short){const now=new Date().toISOString().slice(0,7);let rows=expiryRows(b);if(short)rows=rows.filter(r=>r.month<=addM(now,3)).slice(0,4);
+ if(!rows.length)return '<div class="hint">مفيش أدوية قربت تنتهي.</div>';
+ return rows.map(r=>{const exp=r.month<now,cls=exp?'r':(r.month<=addM(now,1)?'w':'g');
+ return `<div class="item" style="display:block"><b>${monthName(r.month)}</b> <span class="tag ${cls}">${exp?'منتهي':'ينتهي'}</span> <span class="tag">${r.items.reduce((s,i)=>s+i.qty,0)} وحدة</span>
+ ${r.items.map(i=>`<small>${i.name}: ${i.qty}${isOwner()&&!b?' (فرع '+i.branch+')':''}</small>`).join('')}</div>`}).join('')}
+function addM(ym,n){const[y,m]=ym.split('-').map(Number);const d=new Date(y,m-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function drugs(){const b=myBranch(),list=findDrugs(q);
+ return `<div class="row"><input id="sq" placeholder="ابحث عن دوا..." value="${q}" oninput="q=this.value;renderList()">${mic('sq')}</div>
+ ${isOwner()?'<button class="b" onclick="editDrug()">+ دوا جديد</button>':''}<div class="card" style="margin-top:10px" id="dl">${drugList(list,b)}</div>`}
+function drugList(list,b){return list.map(d=>{const n=stock(d,b);return `<div class="item" onclick="${isOwner()?`editDrug('${d.id}')`:''}"><div class="row" style="gap:10px;flex:1;justify-content:flex-start">${d.photo?`<img src="${d.photo}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex:0 0 48px">`:'<div style="width:48px;height:48px;border-radius:8px;background:#e2e8f0;flex:0 0 48px"></div>'}<div><b>${d.name}</b>
+ <small>${isOwner()?'شراء '+money(d.buy)+' · ':''}بيع ${money(d.sell)}${isOwner()?'':''}</small></div></div>
+ <div style="text-align:left"><span class="tag ${n<=(d.min||3)?'r':'g'}">${n} في المخزن</span></div></div>`}).join('')||'<div class="hint">مفيش نتائج</div>'}
+function renderList(){$('dl').innerHTML=drugList(findDrugs(q),myBranch())}
+/* staff see buy price per owner's stated wish: staff list too */
+function editDrug(id){const d=id?S.drugs.find(x=>x.id===id):{name:'',alias:'',buy:'',sell:'',min:3,batches:[]};
+ $('app').querySelector('main').innerHTML=`<div class="card"><h2>${id?'تعديل دوا':'دوا جديد'}</h2>
+ <label>الاسم</label><div class="row"><input id="dn" value="${d.name}">${mic('dn')}</div>
+ <div class="row" style="margin-top:8px"><img id="dimg" src="${d.photo||''}" style="width:90px;height:90px;object-fit:cover;border-radius:12px;background:#e2e8f0;${d.photo?'':'display:none'}">
+ <label class="b" style="text-align:center;margin:0;color:#fff;font-size:15px;cursor:pointer;display:block;padding:14px">${ic('cam')} صوّر الدوا<input id="dp" type="file" accept="image/*" capture="environment" style="display:none" onchange="takePhoto(this)"></label></div>
+ <input type="hidden" id="dph" value="${d.photo||''}">
+ <label>اسم تاني للصوت (اختياري)</label><input id="da" value="${d.alias||''}" placeholder="مثلا: اوكسي">
+ <div class="row"><div><label>سعر الشراء</label><input id="db" type="number" inputmode="decimal" value="${d.buy}"></div>
+ <div><label>سعر البيع المقترح</label><input id="ds" type="number" inputmode="decimal" value="${d.sell}"></div></div>
+ <label>حد أدنى للتنبيه</label><input id="dm" type="number" value="${d.min||3}">
+ <button class="b" onclick="saveDrug('${id||''}')">حفظ</button>
+ <button class="b s" onclick="render()">رجوع</button>
+ ${id?`<button class="b d" onclick="delDrug('${id}')">حذف</button>`:''}</div>`}
+function saveDrug(id){const name=$('dn').value.trim(),buy=+$('db').value,sell=+$('ds').value;if(!name||!(sell>0)){toast('اكتب الاسم وسعر البيع');return}
+ let d=id?S.drugs.find(x=>x.id===id):null;if(!d){d={id:uid(),batches:[]};S.drugs.push(d)}
+ const changed=d.sell!==undefined&&(d.sell!==sell||d.buy!==buy);
+ Object.assign(d,{name,alias:$('da').value.trim(),buy,sell,min:+$('dm').value||3,photo:$('dph').value});
+ S.log.push({t:Date.now(),by:me.name,msg:(changed?'تغيير سعر ':'حفظ ')+name});save();toast('اتحفظ');render()}
+function delDrug(id){if(confirm('حذف الدوا؟')){S.drugs=S.drugs.filter(x=>x.id!==id);save();render()}}
+function takePhoto(inp){const f=inp.files[0];if(!f)return;const im=new Image(),u=URL.createObjectURL(f);
+ im.onload=()=>{const M=480,k=Math.min(1,M/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;
+  c.getContext('2d').drawImage(im,0,0,c.width,c.height);const out=c.toDataURL('image/jpeg',.6);$('dph').value=out;$('dimg').src=out;$('dimg').style.display='block';URL.revokeObjectURL(u)};im.src=u}
+/* stock in */
+function stockin(){const b=myBranch();
+ return `<div class="card"><h2>إضافة كمية للمخزن</h2>
+ ${isOwner()&&!b?'<div class="hint">اختار فرع من فوق الأول.</div>':`
+ <label>الدوا</label><div class="row"><input id="si" list="dlist" placeholder="ابحث أو قول الاسم">${mic('si')}</div>
+ <datalist id="dlist">${S.drugs.map(d=>`<option value="${d.name}">`).join('')}</datalist>
+ <div class="row"><div><label>العدد</label><div class="row"><input id="sq2" type="number" inputmode="numeric">${mic('sq2',1)}</div></div>
+ <div><label>تاريخ الانتهاء</label><input id="se" type="month"></div></div>
+ <button class="b" onclick="doStockIn()">إضافة</button>`}</div>
+ <div class="card"><h2>آخر الحركات</h2>${S.log.slice(-6).reverse().map(l=>`<div class="item"><span>${l.msg}</span><small>${l.by}</small></div>`).join('')||'<div class="hint">لسه مفيش</div>'}</div>`}
+function pick(txt){const r=findDrugs(txt);return r.length===1?r[0]:(S.drugs.find(d=>norm(d.name)===norm(txt))||null)}
+function doStockIn(){const d=pick($('si').value),n=+$('sq2').value;if(!d||!(n>0)){toast('اختار دوا صح واكتب العدد');return}
+ const b=myBranch(),e=$('se').value;let x=d.batches.find(y=>y.branch===b&&y.exp===e);if(x)x.qty+=n;else d.batches.push({branch:b,exp:e,qty:n});
+ S.log.push({t:Date.now(),by:me.name,msg:`+${n} ${d.name} (${S.branches[b]})`});save();toast('اتضاف');render()}
+/* invoice */
+let cart=[];
+function invoice(){const b=myBranch();if(isOwner()&&!b)return '<div class="card hint">اختار فرع من فوق الأول.</div>';
+ return `<div class="card"><h2>فاتورة جديدة</h2>
+ <div class="row"><button class="mic" style="flex:0 0 56px;height:56px" onclick="dictate(this)">${ic('mic',28)}</button><div class="hint">قول: "اوكسي اتنين بخمسين، فيتامين واحد بتلاتين"</div></div>
+ <textarea id="dt" rows="2" placeholder="أو اكتب هنا" style="margin-top:8px"></textarea>
+ <button class="b s" onclick="parseDict($('dt').value)">حلل الكلام</button>
+ <label>أو أضف يدوي</label><div class="row"><input id="ci" list="dlist2" placeholder="الدوا"><datalist id="dlist2">${S.drugs.map(d=>`<option value="${d.name}">`).join('')}</datalist>
+ <input id="cq" type="number" placeholder="العدد" style="max-width:80px"></div><button class="b s" onclick="addLine($('ci').value,+$('cq').value||1)">+ أضف</button></div>
+ <div class="card" id="cartbox">${cartHtml()}</div>`}
+function dictate(btn){listen(t=>{$('dt').value=t;parseDict(t)},btn)}
+function parseDict(t){
+ const toks=norm(t).replace(/[،,.]/g,' و ').split(/\s+/).filter(Boolean);const segs=[];let cur={n:[],nums:[],pm:null};
+ const push=()=>{if(cur.n.length||cur.nums.length)segs.push(cur);cur={n:[],nums:[],pm:null}};
+ const isNum=w=>/^\d+(\.\d+)?$/.test(w)||W[w]!==undefined||W[w.replace(/ه$/,'ة')]!==undefined;
+ const nv=w=>/^\d/.test(w)?parseFloat(w):(W[w]!==undefined?W[w]:W[w.replace(/ه$/,'ة')]);
+ toks.forEach(w0=>{let w=w0;
+  if(w==='و'){push();return}
+  let pm=false;if(w==='ب'||w==='بسعر'){cur.pm=true;return}
+  if(w.startsWith('ب')&&w.length>1&&isNum(w.slice(1))){w=w.slice(1);pm=true}
+  if(isNum(w)){const v=nv(w);if(pm||cur.pm){cur.price=v;cur.pm=null;push()}else if(cur.qty===undefined&&cur.n.length>=0&&cur.nums.length===0){cur.qty=v;cur.nums.push(v)}else{cur.price=v;push()}}
+  else cur.n.push(w.replace(/^و(?=..)/,''))});
+ push();const miss=[];
+ segs.forEach(g=>{const name=g.n.join(' ');const d=name?pick(name):null;if(d)addLine(d.name,g.qty||1,g.price!=null?g.price:null,true);else if(name)miss.push(name)});
+ if(miss.length)toast('مش لاقي: '+miss.join('، ')+' - اكتبه يدوي');refreshCart()}
+function addLine(name,qty,price,quiet){const d=pick(name);if(!d){toast('اختار دوا من القائمة');return}
+ cart.push({id:d.id,name:d.name,qty:qty||1,price:price!=null?price:d.sell,buy:d.buy});if(!quiet)refreshCart()}
+function refreshCart(){const e=$('cartbox');if(e)e.innerHTML=cartHtml()}
+function cartHtml(){if(!cart.length)return '<div class="hint">الفاتورة فاضية.</div>';
+ const t=cart.reduce((s,l)=>s+l.qty*l.price,0),c=cart.reduce((s,l)=>s+l.qty*l.buy,0);
+ return `<table><tr><th>الصنف</th><th>عدد</th><th>سعر</th><th></th></tr>${cart.map((l,i)=>`<tr><td>${l.name}</td>
+ <td><input type="number" value="${l.qty}" style="width:56px;padding:4px" onchange="cart[${i}].qty=+this.value;refreshCart()"></td>
+ <td><input type="number" value="${l.price}" style="width:70px;padding:4px" onchange="cart[${i}].price=+this.value;refreshCart()"></td>
+ <td><button onclick="cart.splice(${i},1);refreshCart()" style="border:0;background:none;color:var(--r)">${ic('x',16)}</button></td></tr>`).join('')}</table>
+ <div class="item"><b>الإجمالي</b><b>${money(t)}</b></div><div class="item"><span>الربح</span><b class="pos">${money(t-c)} (${t?((t-c)/t*100).toFixed(1):0}%)</b></div>
+ <label>نقدي / آجل</label><select id="cr" onchange="$('cn').style.display=this.value=='1'?'block':'none'"><option value="0">نقدي</option><option value="1">آجل (مديونية)</option></select>
+ <input id="cn" placeholder="اسم العميل" style="display:none;margin-top:6px"><button class="b" onclick="saveInvoice()">حفظ الفاتورة</button>`}
+function saveInvoice(){const b=myBranch(),credit=$('cr').value==='1',cust=credit?$('cn').value.trim():'';if(credit&&!cust){toast('اكتب اسم العميل');return}
+ for(const l of cart){const d=S.drugs.find(x=>x.id===l.id);if(stock(d,b)<l.qty){toast('الكمية مش كفاية: '+l.name);return}}
+ cart.forEach(l=>{const d=S.drugs.find(x=>x.id===l.id);let r=l.qty;d.batches.filter(x=>x.branch===b&&x.qty>0).sort((a,c)=>(a.exp||'9').localeCompare(c.exp||'9')).forEach(x=>{const k=Math.min(r,x.qty);x.qty-=k;r-=k})});
+ const total=cart.reduce((s,l)=>s+l.qty*l.price,0);
+ S.invoices.push({id:uid(),date:today(),t:Date.now(),branch:b,by:me.name,credit,customer:cust,lines:cart.map(l=>({...l}))});
+ if(credit)S.debts.push({id:uid(),customer:cust,branch:b,amount:total,paid:0,date:today()});
+ cart=[];save();toast('اتحفظت الفاتورة');render()}
+/* report */
+function report(){const b=myBranch(),dates=[...new Set(S.invoices.map(i=>i.date).concat([today()]))].sort().reverse().slice(0,14);
+ return `<div class="card"><h2>التقرير اليومي ${isOwner()&&!b?'(الفرعين)':''}</h2><table><tr><th>اليوم</th><th>مبيعات</th><th>ربح</th><th>هامش</th><th>فواتير</th></tr>
+ ${dates.map(d=>{const s=dayStats(d,b);return `<tr><td>${d}</td><td>${money(s.sales)}</td><td class="pos">${money(s.profit)}</td><td>${s.margin.toFixed(0)}%</td><td>${s.inv.length}</td></tr>`}).join('')}</table></div>
+ <div class="card"><h2>فواتير النهاردة</h2>${dayStats(today(),b).inv.map(i=>{const t=i.lines.reduce((s,l)=>s+l.qty*l.price,0),c=i.lines.reduce((s,l)=>s+l.qty*l.buy,0);
+ return `<div class="item"><div>${i.lines.map(l=>l.name+' ×'+l.qty).join('، ')}<small>${i.credit?'آجل: '+i.customer:'نقدي'} · ${S.branches[i.branch]}</small></div><div style="text-align:left">${money(t)}<small class="pos">ربح ${money(t-c)} (${t?((t-c)/t*100).toFixed(0):0}%)</small></div></div>`}).join('')||'<div class="hint">مفيش فواتير</div>'}</div>`}
+/* debts */
+function debts(){const b=myBranch(),l=S.debts.filter(d=>(!b||d.branch===b)&&d.amount>d.paid);
+ return `<div class="card"><h2>المديونيات: <span class="neg">${money(debtsTotal(b))}</span></h2>${l.map(d=>`<div class="item"><div><b>${d.customer}</b><small>${d.date} · ${S.branches[d.branch]}</small></div>
+ <div style="text-align:left">${money(d.amount-d.paid)}<br><button onclick="payDebt('${d.id}')" style="border:1px solid var(--g);background:none;color:var(--g);border-radius:8px;padding:3px 8px">سداد</button></div></div>`).join('')||'<div class="hint">مفيش مديونيات</div>'}</div>
+ <div class="card"><h2>إضافة مديونية</h2><input id="dc" placeholder="اسم العميل"><input id="da2" type="number" placeholder="المبلغ" style="margin-top:6px"><button class="b" onclick="addDebt()">إضافة</button></div>`}
+function payDebt(id){const d=S.debts.find(x=>x.id===id),v=num(prompt('المبلغ المسدد؟',d.amount-d.paid)||'');if(v>0){d.paid=Math.min(d.amount,d.paid+v);save();render()}}
+function addDebt(){const c=$('dc').value.trim(),a=+$('da2').value,b=myBranch()||1;if(!c||!(a>0))return;S.debts.push({id:uid(),customer:c,branch:b,amount:a,paid:0,date:today()});save();render()}
+function expiry(){return `<div class="card"><h2>الصلاحية بالشهر</h2>${expirySummary(myBranch(),false)}</div>`}
+function more(){const lb=localStorage.getItem('vetpharm.lastBackup');
+ return `<div class="card"><h2>نسخة احتياطية</h2>
+ <div class="hint" style="color:var(--o);font-size:13px;margin-bottom:8px">تنبيه: لو مسحت بيانات المتصفح أو شلت التطبيق، كل السجلات بتتمسح. خد نسخة احتياطية بشكل دوري واحتفظ بيها (واتساب أو تليجرام).</div>
+ <div class="hint">آخر نسخة: ${lb?new Date(+lb).toLocaleString('ar-EG'):'لسه محصلش'}</div>
+ <button class="b" onclick="backup()">حفظ نسخة احتياطية (كل الأدوية والصور والفرعين)</button>
+ <label class="b s" style="display:block;text-align:center;margin-top:8px;cursor:pointer">استرجاع من نسخة<input type="file" accept=".json,application/json" style="display:none" onchange="restore(this)"></label></div>
+ <div class="card"><h2>إعدادات</h2><div class="hint">المستخدم: ${me.name} (${isOwner()?'مدير':'موظف '+S.branches[me.branch]})</div>
+ ${isOwner()?'<button class="b s" onclick="exportCsv()">تصدير المخزون (Excel/CSV)</button>':''}
+ ${VARIANT==='main'?'':'<button class="b s" onclick="me=null;render()">خروج</button>'}</div>`}
+function restore(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const n=JSON.parse(r.result);
+ if(!n||!Array.isArray(n.drugs)||!Array.isArray(n.invoices)||!Array.isArray(n.debts)||!n.users)throw 0;
+ if(!confirm('هيتم استبدال كل البيانات الحالية بالنسخة دي ('+n.drugs.length+' دوا، '+n.invoices.length+' فاتورة). متأكد؟'))return;
+ S=n;S.log=S.log||[];save();toast('تم الاسترجاع');render()}catch(e){toast('الملف ده مش نسخة احتياطية صحيحة')}};r.readAsText(f)}
+function exportCsv(){const r=['الدوا,شراء,بيع,فرع1,فرع2'].concat(S.drugs.map(d=>[d.name,d.buy,d.sell,stock(d,1),stock(d,2)].join(',')));
+ dl('\ufeff'+r.join('\n'),'inventory.csv','text/csv')}
+function backup(){localStorage.setItem('vetpharm.lastBackup',Date.now());dl(JSON.stringify(S),'vetpharm-backup-'+today()+'.json','application/json');render()}
+function dl(t,n,m){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:m}));a.download=n;a.click()}
+/* ===== shell ===== */
+const tabs=[['home','home','الرئيسية'],['drugs','pill','الأدوية'],['invoice','receipt','فاتورة'],['stockin','box','مخزون'],['debts','card','ديون'],['report','chart','تقرير'],['expiry','clock','صلاحية'],['more','gear','المزيد']];
+const V={home,drugs,invoice,stockin,debts,report,expiry,more};
+function render(){const app=$('app');if(!me&&VARIANT==='main')me=S.users[0];if(!me){app.innerHTML=loginView();return}
+ app.innerHTML=`<header><h1>${ic('pill')} ${isOwner()?'الصيدلية':S.branches[me.branch]}</h1>${isOwner()?`<select onchange="branch=+this.value;render()"><option value="0" ${!branch?'selected':''}>الفرعين</option><option value="1" ${branch==1?'selected':''}>فرع ١</option><option value="2" ${branch==2?'selected':''}>فرع ٢</option></select>`:''}</header>
+ <main>${V[view]()}</main><nav>${tabs.filter(t=>isOwner()||!['report'].includes(t[0])||true).map(t=>`<button class="${view==t[0]?'a':''}" onclick="view='${t[0]}';q='';render()"><i>${ic(t[1])}</i>${t[2]}</button>`).join('')}</nav>`}
+if(location.search.includes('demo')){seed();const P=new URLSearchParams(location.search);if(P.get('as')){me=S.users.find(u=>u.id===P.get('as'));view=P.get('view')||'home';branch=+P.get('branch')||0}}
+function seed(){if(S.drugs.length)return;const m=n=>addM(new Date().toISOString().slice(0,7),n);
+ const mk=(name,alias,buy,sell,b1,b2)=>S.drugs.push({id:uid(),name,alias,buy,sell,min:5,batches:[{branch:1,exp:m(b1[1]),qty:b1[0]},{branch:2,exp:m(b2[1]),qty:b2[0]}]});
+ mk('أوكسي تتراسيكلين 20%','اوكسي',90,120,[12,2],[8,8]);mk('ايفرمكتين حقن','ايفرمكتين',45,65,[30,10],[4,1]);mk('فيتامين AD3E','فيتامين',60,85,[20,14],[15,6]);mk('بنسلين ستربتومايسين','بنسلين',70,95,[3,0],[25,12]);mk('كالسيوم بوروجلوكونات','كالسيوم',55,80,[10,5],[10,3]);
+ S.debts.push({id:uid(),customer:'الحاج محمود',branch:1,amount:850,paid:200,date:today()},{id:uid(),customer:'مزرعة السلام',branch:2,amount:1400,paid:0,date:today()});
+ const d=S.drugs;S.invoices.push({id:uid(),date:today(),t:Date.now(),branch:1,by:'موظف فرع ١',credit:false,lines:[{id:d[0].id,name:d[0].name,qty:2,price:120,buy:90},{id:d[2].id,name:d[2].name,qty:1,price:85,buy:60}]},{id:uid(),date:today(),t:Date.now(),branch:2,by:'موظف فرع ٢',credit:true,customer:'مزرعة السلام',lines:[{id:d[1].id,name:d[1].name,qty:3,price:65,buy:45}]});save()}
+render();
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
